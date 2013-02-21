@@ -1,5 +1,25 @@
 (ns Bakery)
 (use 'clojure.test)
+(require '[clojure.java.io :as io])
+
+(def console (agent *out*))
+(def character-log (agent (io/writer "bakery-states.log" :append true)))
+
+(defn write
+  [^java.io.Writer w & content]
+  (doseq [x (interpose " " content)]
+    (.write w (str x)))
+  (doto w
+    (.write "\n")
+    .flush))
+
+
+(defn log-reference
+  [reference & writer-agents]
+  (add-watch reference :log
+             (fn [_ reference old new]
+               (doseq [writer-agent writer-agents]
+                 (send-off writer-agent write new)))))
 
 ;; Fibonacci Calculator
 (defn fib [n]
@@ -21,6 +41,8 @@
 
 ;; Free servers
 (def free-servers (ref #{}))
+(log-reference free-servers console)
+(log-reference free-servers character-log)
 
 ;; The Ticket Machine
 (def ticket-machine (atom -1))
@@ -34,16 +56,15 @@
 
 
 (defn serve-next [id reference oldValue newValue] 
-  (println oldValue newValue)
   (if (< (count oldValue) (count newValue))
     (if (empty? oldValue)
-      (do (swap! now-serving-sign inc)
-          (println "Now serving:" @now-serving-sign))
+      (swap! now-serving-sign inc)
+         ; (println "Now serving:" @now-serving-sign))
       nil
       )
      (if (not (empty? newValue))
-       (do (swap! now-serving-sign inc)
-          (println "Now serving:" @now-serving-sign))
+       (swap! now-serving-sign inc)
+          ;(println "Now serving:" @now-serving-sign))
        nil
        )
     )
@@ -52,7 +73,7 @@
 ;; Making Pastries
 (defn make-pastries [server]
   (let [pastry-number (rand-int 5)]
-  ;;(println "computing the fib of" pastry-number)
+  ;(println "computing the fib of" pastry-number) --ASK NIC ABOUT THIS LINE
   (send server #(assoc %1 :pastry %2) (fib pastry-number))
   )
 )
@@ -60,14 +81,14 @@
 ;; Serve the Customer
 (defn finished-serving [server]
   (dosync
-    (alter free-servers #(conj %1 %2) server)
-    (println "Server number:" (:id @server) "is now free")
     (send server #(assoc %1 :pastry %2) nil)
+    (alter free-servers #(conj %1 %2) server)
+   ; (println "Server number:" (:id @server) "is now free")
     )
   )
 
 (defn start-serving [server customer]
-  (println "Server" (:id @server) "is helping Customer" (:id @customer) "by ")
+  ;(println "Server" (:id @server) "is helping Customer" (:id @customer) "by ")
   (def stuff (future (make-pastries server)))
   (let [pastry (:pastry @server)]
     (send customer #(assoc %1 :result %2) pastry)
@@ -77,8 +98,8 @@
 (defn get-server []
   (let [the-server (first @free-servers)]
     (dosync
-      (alter free-servers #(disj %1 %2) server)
-      (println "Server" (:id @the-server) "is now busy")
+      (alter free-servers #(disj %1 %2) the-server)
+      ;(println "Server" (:id @the-server) "is now busy")
       the-server
       )
     )
@@ -86,6 +107,7 @@
 
 (defn serve-customer [customer]
   (let [the-server (get-server)]
+    (println "Serving Customer: " customer "with Server: " the-server)
 	  (start-serving the-server customer)
 	  (finished-serving the-server)
    )
@@ -103,7 +125,8 @@
 (defn take-a-number [customer]
   (next-number)
   (send customer #(assoc %1 :ticket-number %2) @ticket-machine)
-  (println "Customer" (:id @customer) "took number:" @ticket-machine)
+  ;(println "Customer" (:id @customer) "took number:" @ticket-machine)
+  ;(println (= @now-serving-sign (:ticket-number @customer)))
   (if (= @now-serving-sign (:ticket-number @customer))
     (serve-customer customer)
     (add-watch now-serving-sign customer watch-sign)
@@ -120,20 +143,29 @@
 
 ;; Make People
 (defn make-people [c s]
-  (let [customerList (flatten (for [i (range c)] (conj [] (customer i))))
-        serverList (flatten (for [i (range s)] (conj [] (server (+ i c)))))]
+  (let [customerList (flatten (doall (for [i (range c)] (conj [] (customer i)))))
+        serverList (flatten (doall (for [i (range s)] (conj [] (server (+ i c))))))]
+    (doall (map #(log-reference %1 character-log) customerList))
+    (doall (map #(log-reference %1 character-log) serverList))
     (add-to-free-servers serverList)
-    (add-watch free-servers 0 serve-next)
+    (add-watch free-servers 2 serve-next)
     (doseq [i customerList]
-       (Thread/sleep (rand-int 1000))
-       (take-a-number i)
-     )
+      (future 
+        (Thread/sleep (rand-int 1000))
+        (take-a-number i)
+        )
+      )
+    )
   )
-)
 
-
+(make-people 5 3)
 
 ;; Tests!!
+;(def server8 (server 8))
+;(def customer1 (customer 1))
+;(def customer2 (customer 2))
+;(dosync (alter free-servers #(conj %1 %2) server8))
+;(def customerList [customer1 customer2])
 (comment
 ; Fibonacci Tests
 (is (= (fib 0) 1))
