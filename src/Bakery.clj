@@ -52,17 +52,16 @@
 
 ;; The "Now Serving" sign
 (def now-serving-sign (atom 0))
-
-
+(log-reference now-serving-sign character-log)
 
 (defn serve-next [id reference oldValue newValue] 
-  (if (< (count oldValue) (count newValue))
-    (if (empty? oldValue)
+  (if (< (count oldValue) (count newValue)) 
+    (if (empty? oldValue)     ; when we put a server into the list
       (swap! now-serving-sign inc)
          ; (println "Now serving:" @now-serving-sign))
       nil
       )
-     (if (not (empty? newValue))
+     (if (not (empty? newValue))  ; when we take a server out of the list
        (swap! now-serving-sign inc)
           ;(println "Now serving:" @now-serving-sign))
        nil
@@ -72,9 +71,10 @@
 
 ;; Making Pastries
 (defn make-pastries [server]
-  (let [pastry-number (rand-int 5)]
+  (let [pastry-number (rand-int 50)]
   ;(println "computing the fib of" pastry-number) --ASK NIC ABOUT THIS LINE
   (send server #(assoc %1 :pastry %2) (fib pastry-number))
+  (await server)
   )
 )
 
@@ -88,7 +88,7 @@
   )
 
 (defn start-serving [server customer]
-  ;(println "Server" (:id @server) "is helping Customer" (:id @customer) "by ")
+  (println "Server" (:id @server) "is helping Customer" (:id @customer) "by ")
   (def stuff (future (make-pastries server)))
   (let [pastry (:pastry @server)]
     (send customer #(assoc %1 :result %2) pastry)
@@ -123,10 +123,10 @@
 ;; Take a number
 ;; Give the customer a number and add the customer to the watch.
 (defn take-a-number [customer]
-  (next-number)
-  (send customer #(assoc %1 :ticket-number %2) @ticket-machine)
+  (send customer #(assoc %1 :ticket-number %2) (next-number))
   ;(println "Customer" (:id @customer) "took number:" @ticket-machine)
   ;(println (= @now-serving-sign (:ticket-number @customer)))
+  (await customer)
   (if (= @now-serving-sign (:ticket-number @customer))
     (serve-customer customer)
     (add-watch now-serving-sign customer watch-sign)
@@ -140,13 +140,14 @@
     ))
   )
 
+(def customerList (map customer (range 5)))
 
 ;; Make People
 (defn make-people [c s]
-  (let [customerList (flatten (doall (for [i (range c)] (conj [] (customer i)))))
-        serverList (flatten (doall (for [i (range s)] (conj [] (server (+ i c))))))]
-    (doall (map #(log-reference %1 character-log) customerList))
-    (doall (map #(log-reference %1 character-log) serverList))
+  (let [;customerList (map customer (range c))
+        serverList (map #(server (+ c %)) (range s))]
+    (doseq [customer customerList] (log-reference customer character-log))
+    (doseq [server serverList] (log-reference server character-log))
     (add-to-free-servers serverList)
     (add-watch free-servers 2 serve-next)
     (doseq [i customerList]
