@@ -58,12 +58,10 @@
   (if (< (count oldValue) (count newValue)) 
     (if (empty? oldValue)     ; when we put a server into the list
       (swap! now-serving-sign inc)
-         ; (println "Now serving:" @now-serving-sign))
       nil
       )
      (if (not (empty? newValue))  ; when we take a server out of the list
        (swap! now-serving-sign inc)
-          ;(println "Now serving:" @now-serving-sign))
        nil
        )
     )
@@ -71,35 +69,31 @@
 
 ;; Making Pastries
 (defn make-pastries [server]
-  (let [pastry-number (rand-int 50)]
-  ;(println "computing the fib of" pastry-number) --ASK NIC ABOUT THIS LINE
+  (let [pastry-number (rand-int 30)]
   (send server #(assoc %1 :pastry %2) (fib pastry-number))
   (await server)
   )
 )
 
-;; Serve the Customer
-(defn finished-serving [server]
-  (dosync
-    (send server #(assoc %1 :pastry %2) nil)
-    (alter free-servers #(conj %1 %2) server)
-   ; (println "Server number:" (:id @server) "is now free")
+;; Watch function that watches for when the server gets the pastry then gives it to the customer
+(defn watch-server [customer reference oldValue newValue]
+  (let [pastry (:pastry newValue)] 
+    (send customer #(assoc %1 :result %2) pastry)
+    (send reference #(assoc %1 :pastry %2) nil)
+    (dosync (alter free-servers #(conj %1 %2) reference))
+    (remove-watch reference customer)
     )
   )
 
 (defn start-serving [server customer]
-  (println "Server" (:id @server) "is helping Customer" (:id @customer) "by ")
-  (def stuff (future (make-pastries server)))
-  (let [pastry (:pastry @server)]
-    (send customer #(assoc %1 :result %2) pastry)
-    )
+  (add-watch server customer watch-server)
+  (future (make-pastries server))
   )
 
 (defn get-server []
   (let [the-server (first @free-servers)]
     (dosync
       (alter free-servers #(disj %1 %2) the-server)
-      ;(println "Server" (:id @the-server) "is now busy")
       the-server
       )
     )
@@ -107,9 +101,7 @@
 
 (defn serve-customer [customer]
   (let [the-server (get-server)]
-    (println "Serving Customer: " customer "with Server: " the-server)
 	  (start-serving the-server customer)
-	  (finished-serving the-server)
    )
   )
 
@@ -124,8 +116,6 @@
 ;; Give the customer a number and add the customer to the watch.
 (defn take-a-number [customer]
   (send customer #(assoc %1 :ticket-number %2) (next-number))
-  ;(println "Customer" (:id @customer) "took number:" @ticket-machine)
-  ;(println (= @now-serving-sign (:ticket-number @customer)))
   (await customer)
   (if (= @now-serving-sign (:ticket-number @customer))
     (serve-customer customer)
@@ -140,11 +130,9 @@
     ))
   )
 
-(def customerList (map customer (range 5)))
-
 ;; Make People
 (defn make-people [c s]
-  (let [;customerList (map customer (range c))
+  (let [customerList (map customer (range c))
         serverList (map #(server (+ c %)) (range s))]
     (doseq [customer customerList] (log-reference customer character-log))
     (doseq [server serverList] (log-reference server character-log))
@@ -159,14 +147,7 @@
     )
   )
 
-(make-people 5 3)
-
 ;; Tests!!
-;(def server8 (server 8))
-;(def customer1 (customer 1))
-;(def customer2 (customer 2))
-;(dosync (alter free-servers #(conj %1 %2) server8))
-;(def customerList [customer1 customer2])
 (comment
 ; Fibonacci Tests
 (is (= (fib 0) 1))
