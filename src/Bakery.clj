@@ -134,11 +134,9 @@
     ))
   )
 
-(def customerList (map customer (range 10)))
-
 ;; Make People
 (defn make-people [c s]
-  (let [;customerList (map customer (range c))
+  (let [customerList (map customer (range c))
         serverList (map #(server (+ c %)) (range s))]
     (doseq [customer customerList] (log-reference customer character-log))
     (doseq [server serverList] (log-reference server character-log))
