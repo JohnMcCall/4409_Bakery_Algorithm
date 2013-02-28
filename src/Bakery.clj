@@ -29,6 +29,10 @@
     )
   )
 
+(defn get-fib [server n]
+  (assoc server :pastry (fib n))
+  )
+
 ;; Customers and Servers
 (defn customer [id]
   (agent {:id id :ticket-number nil :result nil})
@@ -69,8 +73,8 @@
 
 ;; Making Pastries
 (defn make-pastries [server]
-  (let [pastry-number (rand-int 30)]
-  (send server #(assoc %1 :pastry %2) (fib pastry-number))
+  (let [pastry-number (rand-int 50)]
+  (send server get-fib pastry-number)
   (await server)
   )
 )
@@ -130,9 +134,11 @@
     ))
   )
 
+(def customerList (map customer (range 10)))
+
 ;; Make People
 (defn make-people [c s]
-  (let [customerList (map customer (range c))
+  (let [;customerList (map customer (range c))
         serverList (map #(server (+ c %)) (range s))]
     (doseq [customer customerList] (log-reference customer character-log))
     (doseq [server serverList] (log-reference server character-log))
